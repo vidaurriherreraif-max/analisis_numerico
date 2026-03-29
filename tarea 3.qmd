@@ -1,0 +1,506 @@
+---
+title: "Tarea 3. Gráficas de Series Temporales"
+lang: es
+format:
+  html:
+    code-fold: true
+    toc: true
+jupyter: python3
+---
+
+```{python}
+#| include: false
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
+import calendar
+from statsmodels.tsa import seasonal
+import yfinance as yf
+```
+
+Instalar las bibliotecas: `openpyxl`, `datetime`, `plotly` y `statsmodels`; para manejar archivos Excel, trabajar con fechas, crear gráficos interactivos y realizar análisis de series temporales, respectivamente. Agregar también la extension `Data Wrangler` para facilitar la manipulación de datos en `pandas`.
+
+## Indicadores Económicos del INEGI
+
+En este ejercicio se analizan indicadores económicos del INEGI utilizando `pandas` para manejar los datos y `matplotlib` / `seaborn` / `plotly` para visualizarlos.
+
+El objetivo es visualizar la evolución del **Índice de Precios y Cotizaciones (IPC) de la Bolsa Mexicana de Valores** a lo largo del tiempo, lo que permite analizar tendencias del mercado financiero mexicano, identificar patrones y relacionar los ciclos bursátiles con el contexto económico nacional.
+
+### Cargar datos
+
+Cargamos el conjunto de datos y mostramos su estructura para entender qué tipo de información contiene y cómo está organizada. Esto nos permitirá seleccionar las columnas relevantes para nuestras gráficas de series temporales.
+
+```{python}
+data_inegi = pd.read_excel("TIE_Inegi_long.xlsx")
+data_inegi.info()
+```
+
+### IPC de la Bolsa Mexicana de Valores (BMV)
+
+En esta sección se grafica la serie temporal del IPC de la BMV para observar su evolución a lo largo del tiempo. Esto puede ayudar a identificar tendencias, ciclos económicos, el impacto de crisis financieras (como la de 2008-2009 o la pandemia de COVID-19 en 2020) y la recuperación posterior, lo que es relevante para el análisis del mercado de capitales mexicano.
+
+```{python}
+df_ipc = data_inegi[["Fecha", "IPC_BMV"]].dropna()
+df_ipc.info()
+print(f"Fecha de inicio: {df_ipc['Fecha'].min()}")
+print(f"Fecha de fin: {df_ipc['Fecha'].max()}")
+print("------")
+print("Estadísticas descriptivas del IPC BMV:")
+print(df_ipc["IPC_BMV"].describe())
+```
+
+**Serie temporal del IPC BMV**
+
+Una serie temporal es una secuencia de datos recopilados o registrados en intervalos de tiempo sucesivos. En este caso, se grafica el IPC de la BMV para visualizar su evolución y detectar posibles tendencias o patrones en el mercado bursátil mexicano.
+
+```{python}
+df_ipc.set_index("Fecha", inplace=True)
+ipc_ts = df_ipc["IPC_BMV"]
+print(ipc_ts.info())
+```
+
+**Gráfica de la serie temporal del IPC BMV**
+
+```{python}
+plt.figure(figsize=(12, 6))
+plt.plot(ipc_ts.index, ipc_ts.values, marker='o', ms=3)
+plt.title('IPC de la BMV (2000–2025)')
+plt.xlabel('Fecha')
+plt.ylabel('Puntos del Índice')
+plt.grid(alpha=0.3)
+plt.show()
+```
+
+> **Hallazgo:** La gráfica revela una tendencia alcista de largo plazo en el IPC de la BMV, pasando de aproximadamente 6,000 puntos en 2000 a más de 55,000 en 2025. Se aprecian claramente dos caídas pronunciadas: la crisis financiera global de 2008–2009 y el choque de la pandemia COVID-19 en marzo–abril de 2020. Tras ambos episodios, el mercado registró recuperaciones importantes. El período 2022–2023 mostró volatilidad vinculada a la inflación y el ciclo de tasas de interés global.
+
+Filtramos datos a partir de 2016 para observar mejor la tendencia en los últimos años.
+
+```{python}
+ipc_ts_2016 = ipc_ts[ipc_ts.index >= "2016-01-01"]
+plt.figure(figsize=(12, 6))
+plt.plot(ipc_ts_2016.index, ipc_ts_2016.values, marker='o', ms=5)
+plt.title('IPC BMV (Desde 2016)')
+plt.xlabel('Fecha')
+plt.ylabel('Puntos del Índice')
+plt.grid(alpha=0.3)
+plt.show()
+```
+
+> **Hallazgo:** En el período 2016–2025 se distinguen tres fases: un máximo histórico alcanzado en 2018 (~51,000 puntos), seguido de una corrección hasta 2019; la caída drástica de COVID-19 en 2020 que llevó al índice a mínimos de ~32,000 puntos; y una recuperación sostenida desde 2020 que empujó al IPC a nuevos máximos históricos por encima de 55,000 puntos hacia 2024–2025.
+
+**Gráfica interactiva de la serie temporal del IPC BMV**
+
+```{python}
+fig = px.line(x=ipc_ts_2016.index, y=ipc_ts_2016.values,
+              title='IPC BMV (Desde 2016)',
+              labels={'y': 'Puntos del Índice', 'x': 'Fecha'})
+fig.update_xaxes(rangeslider_visible=True)
+fig.show()
+```
+
+**Comparación anual IPC BMV**
+
+```{python}
+df_ipc_anual = ipc_ts_2016.reset_index()
+df_ipc_anual['Año'] = df_ipc_anual['Fecha'].dt.year
+df_ipc_anual['Mes'] = df_ipc_anual['Fecha'].dt.month
+df_ipc_anual["Nombre_mes"] = df_ipc_anual['Fecha'].dt.strftime('%b')
+
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=df_ipc_anual, x='Nombre_mes', y='IPC_BMV',
+             hue='Año', marker='o', palette='tab10')
+plt.title('Comparación Anual del IPC BMV')
+plt.xlabel('Mes')
+plt.ylabel('Puntos del Índice')
+plt.legend(title='Año', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(alpha=0.3)
+plt.show()
+```
+
+> **Hallazgo:** La comparación anual muestra que 2020 fue el año con mayor volatilidad mensual, con una caída abrupta en el primer trimestre y una recuperación parcial hacia finales del año. Los años 2023 y 2024 presentan niveles superiores a todos los años previos, consolidando la tendencia alcista del mercado. Se observa que el IPC tiende a mostrar mayor dinamismo en el segundo semestre del año.
+
+**Comparación mensual del IPC BMV**
+
+```{python}
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=df_ipc_anual, x='Año', y='IPC_BMV',
+             hue='Nombre_mes', marker='o', palette='tab10')
+plt.title('Comparación Mensual del IPC BMV')
+plt.xlabel('Año')
+plt.ylabel('Puntos del Índice')
+plt.legend(title='Mes', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(alpha=0.3)
+plt.show()
+```
+
+```{python}
+fig = px.line(df_ipc_anual, x='Año', y='IPC_BMV', markers=True,
+              color='Nombre_mes', title='Comparación Mensual del IPC BMV',
+              labels={'IPC_BMV': 'Puntos del Índice'})
+fig.update_layout(legend_title_text='Mes',
+                  plot_bgcolor='rgba(194, 190, 190, 0)',
+                  xaxis=dict(tickmode='linear'))
+fig.update_xaxes(dtick=1, gridcolor='rgba(138, 132, 132, 0.77)')
+fig.update_yaxes(gridcolor='rgba(138, 132, 132, 0.77)')
+fig.show()
+```
+
+**Boxplot trimestral del IPC BMV**
+
+Con esta gráfica se busca visualizar la distribución del IPC BMV por trimestre a lo largo de los años. Esto permite identificar patrones estacionales, variabilidad y posibles outliers en cada trimestre, útil para el análisis de ciclos bursátiles.
+
+```{python}
+df_ipc_anual['Trimestre'] = df_ipc_anual['Fecha'].dt.to_period('Q')
+df_ipc_anual['Año_Trimestre'] = (df_ipc_anual['Año'].astype(str) + '-Q' +
+                                  df_ipc_anual['Trimestre'].dt.quarter.astype(str))
+
+plt.figure(figsize=(12, 6))
+sns.boxplot(data=df_ipc_anual, x='Año_Trimestre', y='IPC_BMV',
+            hue='Año', palette='Paired')
+plt.title('Boxplot Trimestral del IPC BMV')
+plt.xlabel('Año-Trimestre')
+plt.ylabel('Puntos del Índice')
+plt.xticks(rotation=45)
+plt.grid(alpha=0.3)
+plt.legend(title='Año', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.show()
+```
+
+> **Hallazgo:** Los boxplots trimestrales evidencian que el IPC BMV ha mostrado mayor dispersión (rango intercuartílico más amplio) en los años 2020 y 2022, reflejando períodos de alta volatilidad. A partir del segundo trimestre de 2020 el índice comenzó su recuperación, y los trimestres de 2023–2024 presentan los niveles más altos y con relativa estabilidad, indicando una fase de consolidación en terreno de máximos históricos.
+
+**Heatmap del IPC BMV**
+
+```{python}
+heatmap_data = df_ipc_anual.pivot_table(index='Mes', columns='Año', values='IPC_BMV')
+
+plt.figure(figsize=(12, 6))
+sns.heatmap(heatmap_data, annot=True, linewidths=0.5, fmt=".0f", cmap='Spectral')
+plt.title('Heatmap del IPC BMV por Mes y Año')
+plt.xlabel('Año')
+plt.ylabel('Mes')
+plt.yticks(ticks=np.linspace(0.5, 11.5, 12),
+           labels=[calendar.month_abbr[i] for i in range(1, 13)], rotation=0)
+plt.show()
+```
+
+> **Hallazgo:** El heatmap refuerza visualmente la trayectoria ascendente del IPC BMV. Los colores más cálidos (rojo–naranja) corresponden a los valores más bajos (2016–2020) mientras que los tonos más fríos (azul–morado) marcan los niveles más altos de 2023–2025. El mes de marzo de 2020 es particularmente notable como el punto de inflexión de la caída pandémica.
+
+**Superficie del IPC BMV**
+
+```{python}
+Z = heatmap_data.values
+X = heatmap_data.columns.astype(str)
+Y = calendar.month_abbr[1:13]
+
+fig = go.Figure(data=[go.Surface(z=Z, x=X, y=Y,
+                contours=dict(
+                    x=dict(show=True, color="white", width=2),
+                    y=dict(show=True, color="white", width=2)
+                ),
+                colorscale='Spectral')])
+fig.update_layout(title='Superficie del IPC BMV',
+                  scene=dict(xaxis_title='Año',
+                             yaxis_title='Mes',
+                             zaxis_title='Puntos del Índice'),
+                  autosize=True, height=600)
+fig.show()
+```
+
+**Descomposición de la serie temporal del IPC BMV**
+
+Una serie temporal $Y_t$ se puede descomponer en tres componentes principales: tendencia ($T_t$), estacionalidad ($S_t$) y ruido o componente aleatorio ($R_t$). La fórmula general para la descomposición aditiva es:
+
+$$\begin{equation} Y_t = T_t + S_t + R_t \end{equation}$$
+
+También existe la descomposición multiplicativa:
+
+$$\begin{equation} Y_t = T_t \times S_t \times R_t \end{equation}$$
+
+**Descomposición aditiva del IPC BMV**
+
+```{python}
+decomposition_add = seasonal.seasonal_decompose(ipc_ts_2016, model='additive', period=12)
+
+plt.figure(figsize=(12, 8))
+plt.subplot(4, 1, 1)
+plt.plot(ipc_ts_2016, color='blue')
+plt.title('Serie Temporal Original')
+
+plt.subplot(4, 1, 2)
+plt.plot(decomposition_add.trend, color='orange')
+plt.title('Tendencia')
+
+plt.subplot(4, 1, 3)
+plt.plot(decomposition_add.seasonal, color='green')
+plt.title('Estacionalidad')
+
+plt.subplot(4, 1, 4)
+plt.plot(decomposition_add.resid, color='red')
+plt.title('Ruido')
+plt.tight_layout()
+plt.show()
+```
+
+> **Hallazgo:** La descomposición aditiva revela que la componente de tendencia captura claramente la trayectoria alcista de largo plazo del IPC BMV, con la corrección de COVID-19 visible como una caída abrupta seguida de recuperación. La estacionalidad muestra un patrón cíclico anual de amplitud moderada, sugiriendo que algunos meses tienden a ser sistemáticamente más fuertes que otros. El componente de ruido presenta mayor magnitud en 2020, consistente con la volatilidad extraordinaria de ese período.
+
+**Descomposición multiplicativa del IPC BMV**
+
+```{python}
+decomposition_mul = seasonal.seasonal_decompose(ipc_ts_2016, model='multiplicative', period=12)
+
+plt.figure(figsize=(12, 8))
+plt.subplot(4, 1, 1)
+plt.plot(ipc_ts_2016, color='blue')
+plt.title('Serie Temporal Original')
+
+plt.subplot(4, 1, 2)
+plt.plot(decomposition_mul.trend, color='orange')
+plt.title('Tendencia')
+
+plt.subplot(4, 1, 3)
+plt.plot(decomposition_mul.seasonal, color='green')
+plt.title('Estacionalidad')
+
+plt.subplot(4, 1, 4)
+plt.plot(decomposition_mul.resid, color='red')
+plt.title('Ruido')
+plt.tight_layout()
+plt.show()
+```
+
+> **Hallazgo:** La descomposición multiplicativa resulta más apropiada cuando la amplitud de las variaciones estacionales crece proporcionalmente al nivel de la serie. En el caso del IPC BMV, los factores estacionales son relativamente estables (oscilan cerca de 1.0), lo que indica que la estacionalidad no depende fuertemente del nivel del índice. El componente de ruido multiplicativo muestra valores atípicos en 2020, confirmando la naturaleza extraordinaria del shock pandémico.
+
+---
+
+## Valores Financieros
+
+Ahora graficamos las series temporales de los precios de las acciones de **Netflix (NFLX)**, **Tesla (TSLA)**, **NVIDIA (NVDA)**, **Disney (DIS)** y **Spotify (SPOT)** utilizando la biblioteca `yfinance` para obtener los datos históricos y `plotly` para visualizarlos de forma interactiva. El período de análisis abarca del 1 de enero de 2020 al 31 de diciembre de 2025, brindando una visión completa del comportamiento de estas empresas reconocidas durante esos años.
+
+```{python}
+tickers = ["NFLX", "TSLA", "NVDA", "DIS", "SPOT"]
+start_date = "2020-01-01"
+end_date   = "2025-12-31"
+
+df_yf = yf.download(tickers, start=start_date, end=end_date, interval="1d")["Close"]
+```
+
+**Gráfica de los precios de las acciones**
+
+```{python}
+fig = go.Figure()
+for ticker in tickers:
+    fig.add_trace(go.Scatter(x=df_yf.index, y=df_yf[ticker], name=ticker))
+fig.update_layout(title='Precios de las acciones (2020–2025)',
+                  xaxis_title='Fecha', yaxis_title='Precio (USD)',
+                  legend_title_text='Acciones', hovermode='x unified')
+fig.update_xaxes(rangeslider_visible=True, gridcolor='rgba(138, 132, 132, 0.77)')
+fig.update_yaxes(gridcolor='rgba(138, 132, 132, 0.77)')
+fig.show()
+```
+
+> **Hallazgo:** La gráfica comparativa revela la marcada heterogeneidad en el desempeño de las cinco empresas. **NVDA** protagonizó el rally más espectacular del período, impulsado por la demanda de chips para inteligencia artificial, pasando de ~$6 (ajustado por split) en 2020 a máximos de ~$150 en 2024–2025. **NFLX** recuperó terreno tras su desplome de 2022 y alcanzó nuevos máximos históricos en 2024–2025. **TSLA** mostró la mayor volatilidad del grupo. **DIS** y **SPOT** presentaron trayectorias más moderadas, con DIS afectada por la transición al streaming y SPOT beneficiada por el crecimiento del audio digital.
+
+```{python}
+print(type(df_yf))
+print(df_yf.columns.tolist())
+print(df_yf.head(2))
+```
+
+Seleccionamos la acción de **NVDA** para realizar un análisis más detallado de su serie temporal, incluyendo la descomposición para identificar tendencia, estacionalidad y ruido.
+
+**Candlestick de NVDA**
+
+```{python}
+df_nvda_ohlc = yf.download("NVDA", start='2024-10-01', end='2025-12-31', interval="1d")
+nvda_ohlc = df_nvda_ohlc.xs("NVDA", level=1, axis=1)
+
+fig = go.Figure(data=[go.Candlestick(
+    x=nvda_ohlc.index,
+    open=nvda_ohlc['Open'],
+    high=nvda_ohlc['High'],
+    low=nvda_ohlc['Low'],
+    close=nvda_ohlc['Close']
+)])
+fig.update_layout(title='Gráfico de Velas de NVDA (Oct 2024 – Dic 2025)',
+                  xaxis_title='Fecha', yaxis_title='Precio (USD)')
+fig.update_xaxes(rangeslider_visible=True, gridcolor='rgba(138, 132, 132, 0.77)')
+fig.update_yaxes(gridcolor='rgba(138, 132, 132, 0.77)')
+fig.show()
+```
+
+> **Hallazgo:** El gráfico de velas japonesas de NVDA en el período reciente muestra la consolidación del precio tras el gran rally impulsado por la inteligencia artificial. Se observan velas con cuerpos amplios en los días de mayor movimiento y sombras largas que indican incertidumbre en niveles clave. El rango de precios entre $120 y $150 representa una zona de soporte/resistencia técnicamente relevante.
+
+**Resumen estadístico de los precios de NVDA**
+
+```{python}
+nvda_ts = df_yf["NVDA"].dropna()
+print(nvda_ts.info())
+print(f"Fecha de inicio: {nvda_ts.index.min()}")
+print(f"Fecha de fin: {nvda_ts.index.max()}")
+print("------")
+print("Estadísticas descriptivas de NVDA:")
+print(nvda_ts.describe())
+```
+
+**Comparación anual de NVDA**
+
+```{python}
+nvda_df = nvda_ts.reset_index()
+nvda_df['Año'] = nvda_df['Date'].dt.year
+nvda_df['Mes'] = nvda_df['Date'].dt.month
+nvda_df["Nombre_mes"] = nvda_df['Date'].dt.strftime('%b')
+nvda_df['Dia_año'] = nvda_df['Date'].dt.dayofyear
+
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=nvda_df, x='Nombre_mes', y='NVDA',
+             hue='Año', marker='o', palette='tab10')
+plt.title('Comparación Anual de NVDA (Mensual)')
+plt.xlabel('Mes')
+plt.ylabel('Precio (USD)')
+plt.legend(title='Año', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(alpha=0.3)
+plt.show()
+```
+
+> **Hallazgo:** La comparación anual de NVDA evidencia cómo 2023 y 2024 rompieron completamente con los niveles de precio de años anteriores. En 2020–2022 los precios se mantenían por debajo de $35, mientras que 2023 inició el despegue hacia $50–80 y 2024 impulsó al título hasta máximos por encima de $130. Esta separación tan marcada entre años refleja el cambio estructural en la valoración de la empresa derivado del boom de IA.
+
+```{python}
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=nvda_df, x='Dia_año', y='NVDA',
+             hue='Año', palette='tab10', errorbar=None)
+
+meses_dias   = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
+meses_nombres = ['Ene','Feb','Mar','Abr','May','Jun',
+                 'Jul','Ago','Sep','Oct','Nov','Dic']
+plt.xticks(ticks=meses_dias, labels=meses_nombres)
+plt.title('Comparación Anual de NVDA (Diaria)')
+plt.xlabel('Mes')
+plt.ylabel('Precio (USD)')
+plt.legend(title='Año', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+```
+
+**Boxplot trimestral de NVDA**
+
+```{python}
+nvda_df['Trimestre'] = nvda_df['Date'].dt.to_period('Q')
+nvda_df['Año_Trimestre'] = (nvda_df['Año'].astype(str) + '-Q' +
+                             nvda_df['Trimestre'].dt.quarter.astype(str))
+
+plt.figure(figsize=(12, 6))
+sns.boxplot(data=nvda_df, x='Año_Trimestre', y='NVDA',
+            hue='Año', palette='Paired')
+plt.title('Boxplot Trimestral de NVDA')
+plt.xlabel('Año-Trimestre')
+plt.ylabel('Precio (USD)')
+plt.xticks(rotation=45)
+plt.grid(alpha=0.3)
+plt.legend(title='Año', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.show()
+```
+
+> **Hallazgo:** Los boxplots trimestrales de NVDA ilustran visualmente la explosión de valor ocurrida a partir del segundo trimestre de 2023. Los trimestres de 2020–2022 muestran rangos intercuartílicos compactos y niveles bajos, mientras que desde 2023Q2 en adelante los precios aumentan dramáticamente con mayor dispersión, reflejando la alta volatilidad asociada al entusiasmo por la inteligencia artificial generativa.
+
+**Heatmap de NVDA**
+
+```{python}
+nvda_df['Mes-dia'] = nvda_df['Date'].dt.strftime('%b-%d')
+heatmap_data_nvda = nvda_df.pivot_table(
+    index='Mes-dia', columns='Año', values='NVDA'
+)
+orden = (nvda_df.drop_duplicates('Mes-dia')
+                .sort_values('Dia_año')['Mes-dia'].tolist())
+heatmap_data_nvda = heatmap_data_nvda.reindex(orden)
+heatmap_data_nvda = heatmap_data_nvda.ffill().bfill()
+
+plt.figure(figsize=(12, 8))
+sns.heatmap(heatmap_data_nvda, annot=False, cmap='Spectral',
+            linewidths=0, linecolor='none')
+plt.title('Heatmap de NVDA por Fecha y Año')
+plt.xlabel('Año')
+plt.ylabel('Fecha')
+plt.tight_layout()
+plt.show()
+```
+
+> **Hallazgo:** El heatmap de NVDA presenta una transición de color dramática entre los años pre-2023 (tonos cálidos = precios bajos) y los años 2023–2025 (tonos fríos = precios altos). Esta visualización hace evidente que el cambio no fue gradual sino un salto estructural, especialmente visible a partir de mayo–junio de 2023, coincidiendo con el lanzamiento masivo de ChatGPT y la demanda explosiva de GPUs para entrenamiento de modelos de lenguaje.
+
+**Superficie de NVDA**
+
+```{python}
+Z = heatmap_data_nvda.values
+X = heatmap_data_nvda.columns.astype(str)
+Y = heatmap_data_nvda.index
+
+fig = go.Figure(data=[go.Surface(z=Z, x=X, y=Y,
+                contours=dict(
+                    x=dict(show=True, color="white", width=2),
+                    y=dict(show=True, color="white", width=2)
+                ),
+                colorscale='Spectral')])
+fig.update_layout(title='Superficie de NVDA',
+                  scene=dict(xaxis_title='Año',
+                             yaxis_title='Fecha',
+                             zaxis_title='Precio (USD)'),
+                  autosize=True, height=600)
+fig.show()
+```
+
+**Descomposición aditiva de NVDA**
+
+```{python}
+decomposition_add_nvda = seasonal.seasonal_decompose(nvda_ts, model='additive', period=252)
+
+plt.figure(figsize=(12, 8))
+plt.subplot(4, 1, 1)
+plt.plot(nvda_ts, color='blue')
+plt.title('Serie Temporal Original')
+
+plt.subplot(4, 1, 2)
+plt.plot(decomposition_add_nvda.trend, color='orange')
+plt.title('Tendencia')
+
+plt.subplot(4, 1, 3)
+plt.plot(decomposition_add_nvda.seasonal, color='green')
+plt.title('Estacionalidad')
+
+plt.subplot(4, 1, 4)
+plt.plot(decomposition_add_nvda.resid, color='red')
+plt.title('Ruido')
+plt.tight_layout()
+plt.show()
+```
+
+> **Hallazgo:** La descomposición aditiva de NVDA con periodo de 252 días hábiles (un año bursátil) revela que la componente de tendencia captura de forma precisa el salto de valoración ocurrido en 2023–2024. La estacionalidad es de amplitud muy pequeña en relación con el nivel del precio, lo que sugiere que los movimientos de NVDA están dominados por factores estructurales (demanda de IA) más que por patrones estacionales recurrentes. El ruido es relativamente alto, consistente con la alta volatilidad intrínseca del sector tecnológico.
+
+**Descomposición multiplicativa de NVDA**
+
+```{python}
+decomposition_mul_nvda = seasonal.seasonal_decompose(nvda_ts, model='multiplicative', period=252)
+
+plt.figure(figsize=(12, 8))
+plt.subplot(4, 1, 1)
+plt.plot(nvda_ts, color='blue')
+plt.title('Serie Temporal Original')
+
+plt.subplot(4, 1, 2)
+plt.plot(decomposition_mul_nvda.trend, color='orange')
+plt.title('Tendencia')
+
+plt.subplot(4, 1, 3)
+plt.plot(decomposition_mul_nvda.seasonal, color='green')
+plt.title('Estacionalidad')
+
+plt.subplot(4, 1, 4)
+plt.plot(decomposition_mul_nvda.resid, color='red')
+plt.title('Ruido')
+plt.tight_layout()
+plt.show()
+```
+
+> **Hallazgo:** La descomposición multiplicativa de NVDA es especialmente apropiada dado que la variabilidad del precio creció proporcionalmente con su nivel. El factor estacional oscila modestamente alrededor de 1.0 con un leve patrón que sugiere que los meses de mayo–junio y el cuarto trimestre tienden a mostrar rendimientos ligeramente superiores al promedio. El componente de ruido multiplicativo presenta valores atípicos en 2022 (corrección del mercado tecnológico) y en el período de máxima euforia por IA en 2024, evidenciando la naturaleza especulativa de esos movimientos.
